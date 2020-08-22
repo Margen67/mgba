@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    #paths-ignore:
+      #- '.github/*'
+      #- '.github/ISSUE_TEMPLATE/**'
+      #- '*.yml'
+  pull_request:
+    #paths-ignore:
+      #- '.github/*'
+      #- '.github/ISSUE_TEMPLATE/**'
+      #- '*.yml'
+
+jobs:
+  build-windows-vcpkg:
+    runs-on: windows-latest
+    env:
+      POWERSHELL_TELEMETRY_OPTOUT: 1
+    steps:
+    - uses: actions/checkout@v2
+    - name: vcpkg
+      run: |
+        vcpkg upgrade --no-dry-run #might not be needed
+        vcpkg --recurse install ffmpeg[vpx,x264] libepoxy libpng libzip sdl2 sqlite3 qt5-base qt5-multimedia
+    - name: CMake generate
+      run: |
+        mkdir build && cd build
+        cmake ..
+    - name: CMake build
+      working-directory: build
+      run: cmake --build . -j $env:NUMBER_OF_PROCESSORS
+
+  build-windows-msys2:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [i686, x86_x64]
+    env:
+      POWERSHELL_TELEMETRY_OPTOUT: 1
+    steps:
+    - uses: actions/checkout@v2
+    - uses: msys2/setup-msys2@v2
+      with:
+        update: true
+        release: false
+    - name: pacman
+      shell: msys2 {0}
+      run: |
+        mkdir build && cd build
+        pacman -Sy --noconfirm --needed base-devel git mingw-w64-${{ matrix.arch }}-{cmake,ffmpeg,gcc,gdb,libelf,libepoxy,libzip,pkg-config,qt5,SDL2,ntldd-git}
+    - name: CMake generate
+      working-directory: build
+      run: cmake .. -G "MSYS Makefiles"
+    - name: Build
+      working-directory: build
+      run: make -j $env:NUMBER_OF_PROCESSORS
+    - name: Prepare artifacts
+      working-directory: build
+      run: cpack -G ZIP
