@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    paths-ignore:
+      - '.github/*'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '*.yml'
+  pull_request:
+    paths-ignore:
+      - '.github/*'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '*.yml'
+
+jobs:
+  build-windows-vcpkg:
+    runs-on: windows-latest
+    env:
+      POWERSHELL_TELEMETRY_OPTOUT: 1
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install
+        run: |
+          git -C $env:VCPKG_INSTALLATION_ROOT clean -dfq ports toolsrc
+          git -C $env:VCPKG_INSTALLATION_ROOT pull --force --quiet
+          $env:VCPKG_INSTALLATION_ROOT\bootstrap-vcpkg
+          vcpkg --triplet x64-windows --recurse install ffmpeg libepoxy libpng libzip sdl2 sqlite3
+          vcpkg --no-dry-run upgrade
+          Remove-Item -Recurse -Force $env:VCPKG_INSTALLATION_ROOT\buildtrees
+      - name: Before build
+        run: cmake . -DCMAKE_PREFIX_PATH=..\Qt\msvc2019_64 -DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT\scripts\buildsystems\vcpkg.cmake
+      - name: Build
+        run: msbuild /m /nologo /p:Configuration=Release mGBA.sln
